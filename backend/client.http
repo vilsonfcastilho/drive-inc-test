@@ -1,0 +1,26 @@
+@baseUrl = http://localhost:3333
+
+# @name get-vehicle-types
+GET {{baseUrl}}/api/v1/vehicles/types
+Content-Type: application/json
+
+###
+
+# @name check-vehicles-availability
+GET {{baseUrl}}/api/v1/vehicles/check-availability?location=dublin&vehicleType=tesla_model3&startDateTime=2023-10-18%2009:50:00&durationMins=15
+Content-Type: application/json
+
+###
+
+# @name schedule-vehicle-test-drive
+POST {{baseUrl}}/api/v1/vehicles/schedule-test-drive
+Content-Type: application/json
+
+{
+  "vehicleId": "tesla_1001",
+  "startDateTime": "2023-10-18T09:50:00Z",
+  "duration": 15,
+  "customerName": "John Doe",
+  "customerPhone": "+353155555555",
+  "customerEmail": "johndoe@email.com"
+}
