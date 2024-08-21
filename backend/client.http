@@ -18,7 +18,7 @@ Content-Type: application/json
 
 {
   "vehicleId": "tesla_1001",
-  "startDateTime": "2023-10-18T09:50:00Z",
+  "startDateTime": "2023-10-18 09:50:00",
   "duration": 15,
   "customerName": "John Doe",
   "customerPhone": "+353155555555",

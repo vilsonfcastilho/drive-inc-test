@@ -1,8 +1,25 @@
 'use client'
 
-import PickupDateForm from '@/components/PickupDateForm';
-import { api } from '@/data/api';
-import { useEffect, useState } from 'react';
+import PickupDateForm from '@/components/PickupDateForm'
+import { api } from '@/data/api'
+import { useEffect, useState } from 'react'
+import { ToastContainer, toast } from 'react-toastify'
+import 'react-toastify/dist/ReactToastify.css'
+
+interface Vehicle {
+  id: string
+  type: string
+  location: string
+  availableFromTime: string
+  availableToTime: string
+  availableDays: string[]
+  minimumMinutesBetweenBookings: number
+}
+
+interface IToastRequest {
+  status: string
+  message: string
+}
 
 interface IGetAvailabilityRequest {
   location: string
@@ -25,17 +42,9 @@ async function getVehicleTypes() {
   try {
     const response = await api(`/v1/vehicles/types`)
 
-    if (!response.ok) {
-      throw new Error('Failed to fetch data')
-    }
-
     const data = await response.json()
 
-    if (data.status === 'success') {
-      return data.data
-    } else {
-      return []
-    }
+    return data
   } catch (err) {
     console.error('Error:', err)
   }
@@ -45,17 +54,9 @@ async function getAvailability({ location, vehicleType, pickupDate, pickupTime, 
   try {
     const response = await api(`/v1/vehicles/check-availability?location=${location}&vehicleType=${vehicleType}&startDateTime=${pickupDate + ' ' + pickupTime}&durationMins=${duration}`)
 
-    if (!response.ok) {
-      throw new Error('Failed to fetch data')
-    }
-
     const data = await response.json()
 
-    if (data.status === 'success') {
-      return data.data
-    } else {
-      return []
-    }
+    return data
   } catch (err) {
     console.error('Error:', err)
   }
@@ -63,8 +64,9 @@ async function getAvailability({ location, vehicleType, pickupDate, pickupTime, 
 
 async function scheduleTestDrive({ vehicleId, startDateTime, duration, customerName, customerPhone, customerEmail }: IScheduleTestDriveRequest): Promise<any> {
   try {
-    const response = await api(`/v1/vehicles/schedule-test-drive`, {
+    const response = await api('/v1/vehicles/schedule-test-drive', {
       method: 'POST',
+      headers: { "Content-type": "application/json" },
       body: JSON.stringify({
         vehicleId,
         startDateTime,
@@ -75,24 +77,16 @@ async function scheduleTestDrive({ vehicleId, startDateTime, duration, customerN
       })
     })
 
-    if (!response.ok) {
-      throw new Error('Failed to fetch data')
-    }
-
     const data = await response.json()
 
-    if (data.status === 'success') {
-      return data.data
-    } else {
-      return []
-    }
+    return data
   } catch (err) {
     console.error('Error:', err)
   }
 }
 
 export default function Home() {
-  const [vehicleTypes, setVehicleTypes] = useState([]);
+  const [vehicleTypes, setVehicleTypes] = useState([])
   const [location, setLocation] = useState('')
   const [vehicleType, setVehicleType] = useState('')
   const [pickupDate, setPickupDate] = useState<Date | null>(null)
@@ -100,19 +94,24 @@ export default function Home() {
   const [pickupMinutes, setPickupMinutes] = useState('')
   const [duration, setDuration] = useState('')
   const [vehicles, setVehicles] = useState([])
-  const [vehicleId, setVehicleId] = useState('')
-  const [customerName, setCustomerName] = useState('')
-  const [customerPhone, setCustomerPhone] = useState('')
-  const [customerEmail, setCustomerEmail] = useState('')
+  const [vehiclesData, setVehiclesData] = useState([]) as any[]
 
   useEffect(() => {
     async function fetchVehicleTypes() {
-      const types = await getVehicleTypes();
-      setVehicleTypes(types);
+      const typesResponse = await getVehicleTypes()
+      setVehicleTypes(typesResponse.data)
     }
 
-    fetchVehicleTypes();
-  }, []);
+    fetchVehicleTypes()
+  }, [])
+
+  function notify({status, message}: IToastRequest) {
+    if (status === 'success') {
+      toast.success(message)
+    } else {
+      toast.warn(message)
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -128,32 +127,66 @@ export default function Home() {
       pickupDate: adjustedDate,
       pickupTime: `${pickupHour}:${pickupMinutes}:00`,
       duration: parseInt(duration, 10),
-    };
+    }
 
-    const availableVehicles = await getAvailability(formData)
-    setVehicles(availableVehicles)
-  };
+    const availableVehiclesResponse = await getAvailability(formData)
+    notify({
+      status: availableVehiclesResponse.status,
+      message: availableVehiclesResponse.message,
+    })
+    setVehicles(
+      availableVehiclesResponse.status === 'success'
+      ? availableVehiclesResponse.data
+      : []
+    )
+    setVehiclesData(
+      availableVehiclesResponse.status === 'success'
+      ? availableVehiclesResponse.data.map((vehicle: Vehicle) => ({
+        vehicleId: vehicle.id,
+        customerName: '',
+        customerPhone: '',
+        customerEmail: ''
+      }))
+      : []
+    )
+  }
 
-  async function handleTestDriveSubmit(e: React.FormEvent<HTMLFormElement>) {
+  function updateVehicleData(index: number, field: string, value: string) {
+    setVehiclesData((prev: any) => {
+      const updatedVehicles = [...prev]
+      updatedVehicles[index] = {
+        ...updatedVehicles[index],
+        [field]: value
+      }
+      return updatedVehicles
+    })
+  }
+
+  async function handleTestDriveSubmit(e: React.FormEvent<HTMLFormElement>, index: number) {
     e.preventDefault()
 
+    const vehicleData = vehiclesData[index]
     const adjustedDate = new Date(pickupDate
       ? pickupDate.getTime() - (pickupDate?.getTimezoneOffset() * 60000)
       : new Date()
     ).toISOString().split('T')[0] + ' ' + `${pickupHour}:${pickupMinutes}:00`
 
     const testDriveFormData = {
-      vehicleId,
-      startDateTime: adjustedDate,
+      vehicleId: String(vehicleData.vehicleId),
+      startDateTime: String(adjustedDate),
       duration: parseInt(duration, 10),
-      customerName,
-      customerPhone,
-      customerEmail,
-    };
+      customerName: String(vehicleData.customerName),
+      customerPhone: String(vehicleData.customerPhone),
+      customerEmail: String(vehicleData.customerEmail),
+    }
 
-    const availableVehicles = await scheduleTestDrive(testDriveFormData)
-    setVehicles(availableVehicles)
-  };
+    const testDriveResponse = await scheduleTestDrive(testDriveFormData)
+    notify({
+      status: testDriveResponse.status,
+      message: testDriveResponse.message,
+    })
+    setVehicles([])
+  }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-muted">
@@ -261,7 +294,7 @@ export default function Home() {
           </form>
         </div>
       </div>
-      {vehicles.map((vehicle: any) => (
+      {vehicles.length > 0 ? vehicles.map((vehicle: Vehicle, index: number) => (
         <div key={vehicle.id} className="mx-auto w-full max-w-md rounded-lg border bg-background p-6 shadow-lg sm:p-8">
           <div>
             <div className="space-y-2 text-center">
@@ -271,15 +304,14 @@ export default function Home() {
               </p>
             </div>
           </div>
-          <form className="mt-6 space-y-4" onSubmit={handleTestDriveSubmit}>
-          <div className="flex-col">
-              <label htmlFor="vehicleId">Vehicle ID</label>
+          <form className="mt-6 space-y-4" onSubmit={(e) => handleTestDriveSubmit(e, index)}>
+            <div className="flex-col">
+              <label htmlFor={`vehicleId-${index}`}>Vehicle ID</label>
               <input
-                id="vehicleId"
+                id={`vehicleId-${index}`}
                 type="text"
                 className="w-full h-10 border border-zinc-300 rounded-md px-2"
-                defaultValue={vehicle.id}
-                onChange={(e) => setVehicleId(e.target.value)}
+                defaultValue={vehiclesData[index]?.vehicleId}
                 disabled
                 required
               />
@@ -294,7 +326,6 @@ export default function Home() {
                   ? pickupDate.getTime() - (pickupDate?.getTimezoneOffset() * 60000)
                   : new Date()
                 ).toISOString().split('T')[0] + ' ' + `${pickupHour}:${pickupMinutes}:00`}
-                onChange={(e) => setLocation(e.target.value)}
                 disabled
                 required
               />
@@ -306,41 +337,40 @@ export default function Home() {
                 type="text"
                 className="w-full h-10 border border-zinc-300 rounded-md px-2"
                 defaultValue={parseInt(duration, 10)}
-                onChange={(e) => setVehicleType(e.target.value)}
                 disabled
                 required
               />
             </div>
             <div className="flex-col">
-              <label htmlFor="vehicleType">Customer name</label>
+              <label htmlFor={`customerName-${index}`}>Customer name</label>
               <input
-                id="vehicleType"
+                id={`customerName-${index}`}
                 type="text"
                 className="w-full h-10 border border-zinc-300 rounded-md px-2"
-                defaultValue={customerName}
-                onChange={(e) => setCustomerName(e.target.value)}
+                value={vehiclesData[index]?.customerName}
+                onChange={(e) => updateVehicleData(index, 'customerName', e.target.value)}
                 required
               />
             </div>
             <div className="flex-col">
-              <label htmlFor="vehicleType">Customer phone</label>
+              <label htmlFor={`customerPhone-${index}`}>Customer phone</label>
               <input
-                id="vehicleType"
+                id={`customerPhone-${index}`}
                 type="text"
                 className="w-full h-10 border border-zinc-300 rounded-md px-2"
-                defaultValue={customerPhone}
-                onChange={(e) => setCustomerPhone(e.target.value)}
+                value={vehiclesData[index]?.customerPhone}
+                onChange={(e) => updateVehicleData(index, 'customerPhone', e.target.value)}
                 required
               />
             </div>
             <div className="flex-col">
-              <label htmlFor="vehicleType">Customer e-mail</label>
+              <label htmlFor={`customerEmail-${index}`}>Customer e-mail</label>
               <input
-                id="vehicleType"
+                id={`customerEmail-${index}`}
                 type="text"
                 className="w-full h-10 border border-zinc-300 rounded-md px-2"
-                defaultValue={customerEmail}
-                onChange={(e) => setCustomerEmail(e.target.value)}
+                value={vehiclesData[index]?.customerEmail}
+                onChange={(e) => updateVehicleData(index, 'customerEmail', e.target.value)}
                 required
               />
             </div>
@@ -352,7 +382,8 @@ export default function Home() {
             </button>
           </form>
         </div>
-      ))}
+      )) : <div />}
+      <ToastContainer />
     </div>
   )
 }
